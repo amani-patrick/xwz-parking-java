@@ -62,92 +62,56 @@
 
 ---
 
-## RabbitMQ Message Flow
+## CI/CD & Artifacts
 
-```
-AUTH-SERVICE  ──publishes──►  xwz.user.exchange  (user.registered)
-                                     │
-                              ┌──────▼──────────────────────────────┐
-                              │  xwz.user.registered (main queue)   │
-                              │  xwz.notif.user.registered (notif)  │
-                              └──────────────────────────────────────┘
-                                     │
-                           NOTIFICATION-SERVICE ◄── listens ──┘
+The project is integrated with **GitHub Actions**. Every push to `main` triggers:
+1.  **Maven Build**: Compilation and packaging of all services.
+2.  **Docker Publishing**: Docker images are automatically built and pushed to **GitHub Container Registry (GHCR)**.
 
-ENTRY-SERVICE ──publishes──►  xwz.entry.exchange
-                              ├── car.entered ──► xwz.car.entered
-                              │                   xwz.notif.car.entered
-                              └── car.exited  ──► xwz.car.exited
-                                                  xwz.notif.car.exited
-```
-
----
-
-## Prerequisites
-
-- Java 21+
-- Maven 3.8+
-- PostgreSQL 15+
-- RabbitMQ 3.12+
-- Docker & Docker Compose (for containerised run)
+Images are available at: `ghcr.io/amani-patrick/xwz-<service-name>:latest`
 
 ---
 
 ## Quick Start
 
-### Option A — Docker Compose (recommended)
+### Option A — Docker Compose (Recommended)
 
+1.  **Clone & Configure**:
+    ```bash
+    git clone https://github.com/amani-patrick/xwz-parking-java.git
+    cd xwz-parking-java
+    cp .env.example .env # Update secrets if needed
+    ```
+
+2.  **Run with Local Build**:
+    ```bash
+    docker-compose up --build
+    ```
+
+3.  **Run with Pre-built Images (GHCR)**:
+    Update `docker-compose.yml` to use `image: ghcr.io/amani-patrick/xwz-<service>:latest` then run:
+    ```bash
+    docker-compose up
+    ```
+
+### Option B — Manual Development
+
+#### 1. Infrastructure
+Start PostgreSQL and RabbitMQ (via Docker or local install).
+
+#### 2. Build & Run
 ```bash
-cd xwz-java
-docker-compose up --build
-```
-
-Services start in order: Postgres → RabbitMQ → Eureka → Gateway → Auth (runs Flyway) → others.
-
-### Option B — Manual
-
-#### 1. Database
-
-```sql
--- in psql
-CREATE USER xwz WITH PASSWORD 'xwz_secret';
-CREATE DATABASE xwz_parking OWNER xwz;
-GRANT ALL PRIVILEGES ON DATABASE xwz_parking TO xwz;
-```
-
-#### 2. RabbitMQ
-
-```bash
-# Using Docker
-docker run -d --name rabbitmq \
-  -p 5672:5672 -p 15672:15672 \
-  rabbitmq:3.12-management-alpine
-```
-
-#### 3. Build all
-
-```bash
-cd xwz-java
+# Build Parent and all modules
 mvn clean install -DskipTests
-```
 
-#### 4. Start in order
-
-```bash
-# Terminal 1
+# Start Discovery Server (Eureka)
 cd discovery-server && mvn spring-boot:run
 
-# Terminal 2 (wait for Eureka)
+# Start other services (in separate terminals)
 cd api-gateway && mvn spring-boot:run
-
-# Terminal 3 (runs Flyway migrations)
 cd auth-service && mvn spring-boot:run
-
-# Terminals 4-7
-cd parking-service      && mvn spring-boot:run
-cd entry-service        && mvn spring-boot:run
-cd report-service       && mvn spring-boot:run
-cd notification-service && mvn spring-boot:run
+cd parking-service && mvn spring-boot:run
+# ... etc
 ```
 
 ---
@@ -160,107 +124,22 @@ cd notification-service && mvn spring-boot:run
 
 ---
 
-## API Documentation (Swagger UI)
+## API Endpoints (via Gateway :8080)
 
-| Service         | Swagger URL |
-|-----------------|-------------|
-| Auth Service    | http://localhost:8081/swagger-ui.html |
-| Parking Service | http://localhost:8082/swagger-ui.html |
-| Entry Service   | http://localhost:8083/swagger-ui.html |
-| Report Service  | http://localhost:8084/swagger-ui.html |
-
-All requests flow through the gateway at **http://localhost:8080**.
-
----
-
-## API Endpoints (via Gateway)
+All requests must include a `Authorization: Bearer <token>` header except for login/register.
 
 ### Auth — `/api/auth`
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| POST | `/api/auth/register` | Public | Register new user |
-| POST | `/api/auth/login` | Public | Login, get JWT |
-| GET  | `/api/auth/me` | Any | Get own profile |
-| GET  | `/api/auth/users` | Admin | List all users (paginated) |
-| PATCH | `/api/auth/users/{id}/toggle` | Admin | Activate/deactivate user |
+- `POST /api/auth/login` (Public)
+- `POST /api/auth/register` (Public)
+- `GET /api/auth/me` (Authenticated)
 
 ### Parkings — `/api/parkings`
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| POST | `/api/parkings` | Admin | Register parking |
-| GET  | `/api/parkings` | Any | List parkings (paginated) |
-| GET  | `/api/parkings/{code}` | Any | Get parking by code |
-| PUT  | `/api/parkings/{code}` | Admin | Update parking |
-| DELETE | `/api/parkings/{code}` | Admin | Deactivate parking |
+- `GET /api/parkings` (Any)
+- `POST /api/parkings` (Admin)
 
 ### Entries — `/api/entries`
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| POST | `/api/entries` | Any | Register car entry → ticket |
-| PATCH | `/api/entries/{id}/exit` | Any | Register exit → bill |
-| GET  | `/api/entries` | Any | List entries (paginated) |
-| GET  | `/api/entries/{id}` | Any | Get single entry |
-
-### Reports — `/api/reports`
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| GET | `/api/reports/dashboard` | Admin | Real-time dashboard stats |
-| GET | `/api/reports/outgoing?startDate=&endDate=` | Admin | Outgoing + revenue report |
-| GET | `/api/reports/entered?startDate=&endDate=` | Admin | Entered cars report |
-| GET | `/api/reports/parking/{code}/cars` | Any | Cars at specific parking |
-
-**Date format for reports:** `2024-01-15T00:00:00`
-
----
-
-## Validation Rules
-
-- **Password:** min 8 chars, must have uppercase + lowercase + number + special char (`@$!%*?&`)
-- **Exit time:** must be AFTER entry time (prevents "leaving earlier than they entered")
-- **Plate number:** uppercase alphanumeric, max 20 chars
-- **Parking code:** uppercase alphanumeric, 2–20 chars
-- **Fee per hour:** must be ≥ 0
-- **Total spaces:** must be ≥ 1
-- **Duplicate entry:** same plate in same parking with status PARKED → rejected
-
----
-
-## Security
-
-- JWT validated at **API Gateway** level (filter applied before routing)
-- Role (`ADMIN` / `PARKING_TENANT`) propagated as `X-User-Role` header to services
-- Services trust gateway headers — no re-validation needed downstream
-- BCrypt password hashing (strength 12)
-- CORS configured on gateway
-- Flyway manages DB migrations (only auth-service runs them; others use placeholder V1)
-
----
-
-## Notification Configuration
-
-The notification service reads mail settings from `notification-service/src/main/resources/application.yml` and supports environment variable overrides:
-
-- `MAIL_USERNAME`: SMTP username. Defaults to `noreply@xwzparking.rw`.
-- `MAIL_PASSWORD`: SMTP password. Defaults to `changeme`.
-- `NOTIFICATION_MAIL_ENABLED`: Set to `true` to actually send email. Defaults to `false`.
-
-With Docker Compose, add them under the `notification-service.environment` section. Example:
-
-```yaml
-notification-service:
-  environment:
-    - SPRING_RABBITMQ_HOST=rabbitmq
-    - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://eureka:eureka-secret@discovery-server:8761/eureka/
-    - MAIL_USERNAME=your-smtp-user
-    - MAIL_PASSWORD=your-smtp-password
-    - NOTIFICATION_MAIL_ENABLED=true
-```
-
-If email is disabled, the service currently logs notification content instead of persisting it. A true in-app notification feature would require adding storage plus read APIs, for example:
-
-- add a `Notification` entity and repository in `notification-service`
-- save incoming event payloads before or instead of sending email
-- expose read endpoints such as `GET /api/notifications/{email}` for a frontend dashboard
+- `POST /api/entries` (Any)
+- `PATCH /api/entries/{id}/exit` (Any)
 
 ---
 
@@ -268,36 +147,17 @@ If email is disabled, the service currently logs notification content instead of
 
 ```
 xwz-java/
-├── pom.xml                          ← Parent POM (com.amnii.parking)
-├── docker-compose.yml
-├── discovery-server/
-│   └── src/main/java/com/amnii/parking/discovery/
+├── .github/workflows/build.yml      ← CI/CD Pipeline
+├── pom.xml                          ← Parent POM
+├── docker-compose.yml               ← Microservice Orchestration
 ├── api-gateway/
 │   └── src/main/java/com/amnii/parking/gateway/
-│       ├── filter/JwtAuthFilter.java
+│       ├── config/AuthenticationFilter.java  ← Central JWT Security
 │       └── ApiGatewayApplication.java
 ├── auth-service/
 │   └── src/main/java/com/amnii/parking/auth/
-│       ├── entity/User.java
-│       ├── dto/AuthDtos.java
-│       ├── repository/UserRepository.java
-│       ├── service/AuthService.java
-│       ├── controller/AuthController.java
-│       ├── config/{JwtUtil,RabbitMQConfig,SecurityConfig}.java
-│       ├── messaging/UserRegisteredEvent.java
-│       └── exception/
-├── parking-service/
-│   └── src/main/java/com/amnii/parking/parkingservice/
-├── entry-service/
-│   └── src/main/java/com/amnii/parking/entryservice/
-│       ├── messaging/EntryEvents.java       ← CAR_ENTERED / CAR_EXITED
-│       ├── config/RabbitMQConfig.java
-│       └── service/EntryService.java        ← exit time validation
-├── report-service/
-│   └── src/main/java/com/amnii/parking/reportservice/
-└── notification-service/
-    └── src/main/java/com/amnii/parking/notification/
-        ├── listener/NotificationListener.java  ← all 3 queues
-        ├── service/NotificationService.java    ← email/log
-        └── config/RabbitMQConfig.java
+├── parking-service/                 ← Added spring-security-starter
+├── entry-service/                   ← Car entry/exit logic
+├── report-service/                  ← Stats & Analytics
+└── notification-service/            ← RabbitMQ & Email alerts
 ```

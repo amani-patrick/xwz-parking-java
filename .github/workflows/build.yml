@@ -1,101 +1,24 @@
-name: Build And Publish Docker Images
+name: Java CI with Maven
 
 on:
   push:
-    branches:
-      - main
+    branches: [ "main" ]
     paths-ignore:
-      - '**/*.md'
-      - 'docs/**'
+      - '**.md'
       - '.gitignore'
+      - 'docs/**'
 
 jobs:
-  docker:
+  build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
 
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and push discovery-server
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./discovery-server/Dockerfile
-          push: true
-          tags: |
-            ghcr.io/amani-patrick/discovery-server:latest
-            ghcr.io/amani-patrick/discovery-server:${{ github.sha }}
-
-      - name: Build and push api-gateway
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./api-gateway/Dockerfile
-          push: true
-          tags: |
-            ghcr.io/amani-patrick/api-gateway:latest
-            ghcr.io/amani-patrick/api-gateway:${{ github.sha }}
-
-      - name: Build and push auth-service
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./auth-service/Dockerfile
-          push: true
-          tags: |
-            ghcr.io/amani-patrick/auth-service:latest
-            ghcr.io/amani-patrick/auth-service:${{ github.sha }}
-
-      - name: Build and push parking-service
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./parking-service/Dockerfile
-          push: true
-          tags: |
-            ghcr.io/amani-patrick/parking-service:latest
-            ghcr.io/amani-patrick/parking-service:${{ github.sha }}
-
-      - name: Build and push entry-service
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./entry-service/Dockerfile
-          push: true
-          tags: |
-            ghcr.io/amani-patrick/entry-service:latest
-            ghcr.io/amani-patrick/entry-service:${{ github.sha }}
-
-      - name: Build and push report-service
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./report-service/Dockerfile
-          push: true
-          tags: |
-            ghcr.io/amani-patrick/report-service:latest
-            ghcr.io/amani-patrick/report-service:${{ github.sha }}
-
-      - name: Build and push notification-service
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./notification-service/Dockerfile
-          push: true
-          tags: |
-            ghcr.io/amani-patrick/notification-service:latest
-            ghcr.io/amani-patrick/notification-service:${{ github.sha }}
+    - uses: actions/checkout@v4
+    - name: Set up JDK 21
+      uses: actions/setup-java@v4
+      with:
+        java-version: '21'
+        distribution: 'temurin'
+        cache: maven
+    - name: Build with Maven
+      run: mvn -B package --file pom.xml -DskipTests

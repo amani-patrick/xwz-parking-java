@@ -1,5 +1,0 @@
-com\amnii\parking\gateway\ApiGatewayApplication.class
-com\amnii\parking\gateway\config\AuthenticationFilter.class
-com\amnii\parking\gateway\config\JwtUtil.class
-com\amnii\parking\gateway\filter\JwtAuthenticationFilter.class
-com\amnii\parking\gateway\config\AuthenticationFilter$Config.class

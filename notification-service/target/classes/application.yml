@@ -1,0 +1,61 @@
+server:
+  port: 8085
+
+spring:
+  application:
+    name: notification-service
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
+    virtual-host: /
+    listener:
+      simple:
+        acknowledge-mode: auto
+        retry:
+          enabled: true
+          initial-interval: 1000
+          max-attempts: 3
+          multiplier: 2.0
+  # Mail (set enabled: true and configure SMTP to send real emails)
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${MAIL_USERNAME:noreply@xwzparking.rw}
+    password: ${MAIL_PASSWORD:changeme}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://eureka:eureka-secret@localhost:8761/eureka/
+  instance:
+    prefer-ip-address: true
+
+notification:
+  mail:
+    enabled: false   # Set to true + configure SMTP to send real emails
+    from: noreply@xwzparking.rw
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+logging:
+  level:
+    com.amnii.parking: DEBUG
+    org.springframework.amqp: INFO

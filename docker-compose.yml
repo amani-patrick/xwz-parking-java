@@ -1,0 +1,183 @@
+version: '3.8'
+
+services:
+
+  # ── Infrastructure ──────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    container_name: xwz-postgres
+    environment:
+      POSTGRES_USER: xwz
+      POSTGRES_PASSWORD: xwz_secret
+      POSTGRES_DB: xwz_parking
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - xwz-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U xwz -d xwz_parking"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3.12-management-alpine
+    container_name: xwz-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"   # Management UI
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    volumes:
+      - rabbitmqdata:/var/lib/rabbitmq
+    networks:
+      - xwz-net
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Discovery Server ────────────────────────────────────────────────────────
+  discovery-server:
+    build: ./discovery-server
+    container_name: xwz-discovery
+    ports:
+      - "8761:8761"
+    networks:
+      - xwz-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8761/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  # ── API Gateway ─────────────────────────────────────────────────────────────
+  api-gateway:
+    build: ./api-gateway
+    container_name: xwz-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://eureka:eureka-secret@discovery-server:8761/eureka/
+      - JWT_SECRET=xwz_jwt_super_secret_key_must_be_at_least_256_bits_long_for_hs256
+    depends_on:
+      discovery-server:
+        condition: service_healthy
+    networks:
+      - xwz-net
+
+  # ── Auth Service ────────────────────────────────────────────────────────────
+  auth-service:
+    build: ./auth-service
+    container_name: xwz-auth
+    ports:
+      - "8081:8081"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/xwz_parking
+      - SPRING_DATASOURCE_USERNAME=xwz
+      - SPRING_DATASOURCE_PASSWORD=xwz_secret
+      - SPRING_RABBITMQ_HOST=rabbitmq
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://eureka:eureka-secret@discovery-server:8761/eureka/
+      - JWT_SECRET=xwz_jwt_super_secret_key_must_be_at_least_256_bits_long_for_hs256
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      discovery-server:
+        condition: service_healthy
+    networks:
+      - xwz-net
+
+  # ── Parking Service ─────────────────────────────────────────────────────────
+  parking-service:
+    build: ./parking-service
+    container_name: xwz-parking
+    ports:
+      - "8082:8082"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/xwz_parking
+      - SPRING_DATASOURCE_USERNAME=xwz
+      - SPRING_DATASOURCE_PASSWORD=xwz_secret
+      - SPRING_RABBITMQ_HOST=rabbitmq
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://eureka:eureka-secret@discovery-server:8761/eureka/
+    depends_on:
+      auth-service:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - xwz-net
+
+  # ── Entry Service ───────────────────────────────────────────────────────────
+  entry-service:
+    build: ./entry-service
+    container_name: xwz-entry
+    ports:
+      - "8083:8083"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/xwz_parking
+      - SPRING_DATASOURCE_USERNAME=xwz
+      - SPRING_DATASOURCE_PASSWORD=xwz_secret
+      - SPRING_RABBITMQ_HOST=rabbitmq
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://eureka:eureka-secret@discovery-server:8761/eureka/
+      - SERVICES_PARKING_SERVICE_URL=http://parking-service:8082
+    depends_on:
+      auth-service:
+        condition: service_started
+      parking-service:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - xwz-net
+
+  # ── Report Service ──────────────────────────────────────────────────────────
+  report-service:
+    build: ./report-service
+    container_name: xwz-report
+    ports:
+      - "8084:8084"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/xwz_parking
+      - SPRING_DATASOURCE_USERNAME=xwz
+      - SPRING_DATASOURCE_PASSWORD=xwz_secret
+      - SPRING_RABBITMQ_HOST=rabbitmq
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://eureka:eureka-secret@discovery-server:8761/eureka/
+    depends_on:
+      auth-service:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - xwz-net
+
+  # ── Notification Service ────────────────────────────────────────────────────
+  notification-service:
+    build: ./notification-service
+    container_name: xwz-notification
+    ports:
+      - "8085:8085"
+    environment:
+      - SPRING_RABBITMQ_HOST=rabbitmq
+      - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://eureka:eureka-secret@discovery-server:8761/eureka/
+      - NOTIFICATION_MAIL_ENABLED=false
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      discovery-server:
+        condition: service_healthy
+    networks:
+      - xwz-net
+
+volumes:
+  pgdata:
+  rabbitmqdata:
+
+networks:
+  xwz-net:
+    driver: bridge

@@ -1,33 +1,39 @@
 package com.amnii.parking.notification.controller;
 
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.tags.Tag;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import com.amnii.parking.notification.entity.Notification;
+import com.amnii.parking.notification.repository.NotificationRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.web.bind.annotation.*;
 
-import java.time.LocalDateTime;
-import java.util.Map;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/notifications")
-@Tag(name = "Notifications", description = "Notification service status")
+@RequiredArgsConstructor
 public class NotificationController {
 
-    @GetMapping("/status")
-    @Operation(summary = "Get notification service status and subscribed queues")
-    public ResponseEntity<Map<String, Object>> status() {
-        return ResponseEntity.ok(Map.of(
-                "service", "notification-service",
-                "status", "UP",
-                "timestamp", LocalDateTime.now().toString(),
-                "subscribedQueues", new String[]{
-                        "xwz.notif.user.registered",
-                        "xwz.notif.car.entered",
-                        "xwz.notif.car.exited"
-                },
-                "description", "Listens to RabbitMQ events and sends notifications"
-        ));
+    private final NotificationRepository notificationRepository;
+
+    @GetMapping
+    public Page<Notification> getMyNotifications(
+            @RequestHeader("X-User-Email") String email,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        return notificationRepository.findByRecipientEmailOrderByCreatedAtDesc(email, PageRequest.of(page, size));
+    }
+
+    @GetMapping("/unread-count")
+    public long getUnreadCount(@RequestHeader("X-User-Email") String email) {
+        return notificationRepository.countByRecipientEmailAndIsReadFalse(email);
+    }
+
+    @PatchMapping("/{id}/read")
+    public void markAsRead(@PathVariable UUID id) {
+        notificationRepository.findById(id).ifPresent(n -> {
+            n.setRead(true);
+            notificationRepository.save(n);
+        });
     }
 }

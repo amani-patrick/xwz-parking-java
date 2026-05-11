@@ -1,12 +1,15 @@
 package com.amnii.parking.notification.service;
 
+import com.amnii.parking.notification.entity.Notification;
 import com.amnii.parking.notification.event.NotificationEvents.*;
+import com.amnii.parking.notification.repository.NotificationRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.format.DateTimeFormatter;
 
@@ -16,6 +19,7 @@ import java.time.format.DateTimeFormatter;
 public class NotificationService {
 
     private final JavaMailSender mailSender;
+    private final NotificationRepository notificationRepository;
 
     @Value("${notification.mail.enabled:false}")
     private boolean mailEnabled;
@@ -28,6 +32,7 @@ public class NotificationService {
 
     // ── User Registered ───────────────────────────────────────────────────────
 
+    @Transactional
     public void handleUserRegistered(UserRegisteredEvent event) {
         String subject = "Welcome to XWZ Parking, " + event.getFirstName() + "!";
         String body = String.format("""
@@ -48,14 +53,14 @@ public class NotificationService {
                 event.getEmail(), event.getRole());
 
         log.info("[NOTIFICATION] USER_REGISTERED | email={} role={}", event.getEmail(), event.getRole());
-        log.info("[NOTIFICATION] Subject: {}", subject);
-        log.info("[NOTIFICATION] Body:\n{}", body);
-
+        
+        saveInAppNotification(event.getEmail(), subject, body, "USER_REGISTERED");
         sendEmail(event.getEmail(), subject, body);
     }
 
     // ── Car Entered ───────────────────────────────────────────────────────────
 
+    @Transactional
     public void handleCarEntered(CarEnteredEvent event) {
         String subject = "Parking Ticket — " + event.getTicketNumber();
         String body = String.format("""
@@ -81,14 +86,16 @@ public class NotificationService {
 
         log.info("[NOTIFICATION] CAR_ENTERED | plate={} parking={} ticket={}",
                 event.getPlateNumber(), event.getParkingCode(), event.getTicketNumber());
-        log.info("[NOTIFICATION] Ticket:\n{}", body);
 
-        // In production send to driver's registered email / SMS
+        // In app, we link to the plate for now if email unknown
+        saveInAppNotification("plate:" + event.getPlateNumber(), subject, body, "CAR_ENTERED");
+        
         // sendEmail(driverEmail, subject, body);
     }
 
     // ── Car Exited ────────────────────────────────────────────────────────────
 
+    @Transactional
     public void handleCarExited(CarExitedEvent event) {
         String subject = "Parking Bill — " + event.getTicketNumber();
         String body = String.format("""
@@ -119,13 +126,29 @@ public class NotificationService {
         log.info("[NOTIFICATION] CAR_EXITED | plate={} ticket={} charged={} {}",
                 event.getPlateNumber(), event.getTicketNumber(),
                 event.getChargedAmount(), event.getCurrency());
-        log.info("[NOTIFICATION] Bill:\n{}", body);
 
-        // In production send to driver's registered email / SMS
+        saveInAppNotification("plate:" + event.getPlateNumber(), subject, body, "CAR_EXITED");
+
         // sendEmail(driverEmail, subject, body);
     }
 
-    // ── Email helper ──────────────────────────────────────────────────────────
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private void saveInAppNotification(String recipient, String title, String message, String type) {
+        try {
+            Notification notification = Notification.builder()
+                    .recipientEmail(recipient)
+                    .title(title)
+                    .message(message)
+                    .type(type)
+                    .isRead(false)
+                    .build();
+            notificationRepository.save(notification);
+            log.info("[NOTIFICATION] Saved in-app notification for {}", recipient);
+        } catch (Exception e) {
+            log.error("[NOTIFICATION] Failed to save in-app notification: {}", e.getMessage());
+        }
+    }
 
     private void sendEmail(String to, String subject, String body) {
         if (!mailEnabled) {

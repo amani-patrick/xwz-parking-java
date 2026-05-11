@@ -1,10 +1,10 @@
 FROM maven:3.9-eclipse-temurin-21 AS build
 WORKDIR /build
 # Copy parent POM first for dependency caching
-COPY ../pom.xml /build/parent-pom.xml
-COPY pom.xml .
+COPY pom.xml parent-pom.xml
+COPY discovery-server/pom.xml .
 RUN mvn -f parent-pom.xml dependency:go-offline -pl discovery-server -am -q 2>/dev/null || true
-COPY src ./src
+COPY discovery-server/src ./src
 RUN mvn clean package -DskipTests -q
 
 FROM eclipse-temurin:21-jre-alpine

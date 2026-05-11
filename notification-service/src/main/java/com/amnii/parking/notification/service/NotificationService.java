@@ -1,7 +1,9 @@
 package com.amnii.parking.notification.service;
 
 import com.amnii.parking.notification.entity.Notification;
+import com.amnii.parking.notification.entity.NotificationPreference;
 import com.amnii.parking.notification.event.NotificationEvents.*;
+import com.amnii.parking.notification.repository.NotificationPreferenceRepository;
 import com.amnii.parking.notification.repository.NotificationRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,6 +22,7 @@ public class NotificationService {
 
     private final JavaMailSender mailSender;
     private final NotificationRepository notificationRepository;
+    private final NotificationPreferenceRepository preferenceRepository;
 
     @Value("${notification.mail.enabled:false}")
     private boolean mailEnabled;
@@ -54,8 +57,7 @@ public class NotificationService {
 
         log.info("[NOTIFICATION] USER_REGISTERED | email={} role={}", event.getEmail(), event.getRole());
         
-        saveInAppNotification(event.getEmail(), subject, body, "USER_REGISTERED");
-        sendEmail(event.getEmail(), subject, body);
+        processNotification(event.getEmail(), subject, body, "USER_REGISTERED");
     }
 
     // ── Car Entered ───────────────────────────────────────────────────────────
@@ -87,10 +89,7 @@ public class NotificationService {
         log.info("[NOTIFICATION] CAR_ENTERED | plate={} parking={} ticket={}",
                 event.getPlateNumber(), event.getParkingCode(), event.getTicketNumber());
 
-        // In app, we link to the plate for now if email unknown
-        saveInAppNotification("plate:" + event.getPlateNumber(), subject, body, "CAR_ENTERED");
-        
-        // sendEmail(driverEmail, subject, body);
+        processNotification("plate:" + event.getPlateNumber(), subject, body, "CAR_ENTERED");
     }
 
     // ── Car Exited ────────────────────────────────────────────────────────────
@@ -127,9 +126,22 @@ public class NotificationService {
                 event.getPlateNumber(), event.getTicketNumber(),
                 event.getChargedAmount(), event.getCurrency());
 
-        saveInAppNotification("plate:" + event.getPlateNumber(), subject, body, "CAR_EXITED");
+        processNotification("plate:" + event.getPlateNumber(), subject, body, "CAR_EXITED");
+    }
 
-        // sendEmail(driverEmail, subject, body);
+    // ── Core Processing Logic ────────────────────────────────────────────────
+
+    private void processNotification(String recipient, String title, String message, String type) {
+        NotificationPreference prefs = preferenceRepository.findById(recipient)
+                .orElse(NotificationPreference.builder().email(recipient).build());
+
+        if (prefs.isInAppEnabled()) {
+            saveInAppNotification(recipient, title, message, type);
+        }
+
+        if (prefs.isEmailEnabled() && !recipient.startsWith("plate:")) {
+            sendEmail(recipient, title, message);
+        }
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

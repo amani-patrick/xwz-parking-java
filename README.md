@@ -236,6 +236,34 @@ All requests flow through the gateway at **http://localhost:8080**.
 
 ---
 
+## Notification Configuration
+
+The notification service reads mail settings from `notification-service/src/main/resources/application.yml` and supports environment variable overrides:
+
+- `MAIL_USERNAME`: SMTP username. Defaults to `noreply@xwzparking.rw`.
+- `MAIL_PASSWORD`: SMTP password. Defaults to `changeme`.
+- `NOTIFICATION_MAIL_ENABLED`: Set to `true` to actually send email. Defaults to `false`.
+
+With Docker Compose, add them under the `notification-service.environment` section. Example:
+
+```yaml
+notification-service:
+  environment:
+    - SPRING_RABBITMQ_HOST=rabbitmq
+    - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://eureka:eureka-secret@discovery-server:8761/eureka/
+    - MAIL_USERNAME=your-smtp-user
+    - MAIL_PASSWORD=your-smtp-password
+    - NOTIFICATION_MAIL_ENABLED=true
+```
+
+If email is disabled, the service currently logs notification content instead of persisting it. A true in-app notification feature would require adding storage plus read APIs, for example:
+
+- add a `Notification` entity and repository in `notification-service`
+- save incoming event payloads before or instead of sending email
+- expose read endpoints such as `GET /api/notifications/{email}` for a frontend dashboard
+
+---
+
 ## Project Structure
 
 ```

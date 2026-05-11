@@ -165,7 +165,10 @@ services:
     environment:
       - SPRING_RABBITMQ_HOST=rabbitmq
       - EUREKA_CLIENT_SERVICEURL_DEFAULTZONE=http://eureka:eureka-secret@discovery-server:8761/eureka/
-      - NOTIFICATION_MAIL_ENABLED=false
+      - NOTIFICATION_MAIL_ENABLED=${NOTIFICATION_MAIL_ENABLED:-false}
+      - MAIL_USERNAME=${MAIL_USERNAME:-}
+      - MAIL_PASSWORD=${MAIL_PASSWORD:-}
+      - NOTIFICATION_MAIL_FROM=${NOTIFICATION_MAIL_FROM:-noreply@xwzparking.rw}
     depends_on:
       rabbitmq:
         condition: service_healthy

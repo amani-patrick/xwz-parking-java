@@ -41,7 +41,7 @@ eureka:
 notification:
   mail:
     enabled: false   # Set to true + configure SMTP to send real emails
-    from: noreply@xwzparking.rw
+    from: ${NOTIFICATION_MAIL_FROM:noreply@xwzparking.rw}
 
 springdoc:
   api-docs:

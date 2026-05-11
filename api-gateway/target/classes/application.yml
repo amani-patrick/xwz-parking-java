@@ -1,0 +1,65 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      discovery:
+        locator:
+          enabled: false
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowed-origin-patterns: "*"
+            allowed-methods:
+              - GET
+              - POST
+              - PUT
+              - PATCH
+              - DELETE
+              - OPTIONS
+            allowed-headers: "*"
+            exposed-headers: "*"
+      routes:
+        - id: auth-service
+          uri: lb://auth-service
+          predicates:
+            - Path=/api/auth/**
+        - id: parking-service
+          uri: lb://parking-service
+          predicates:
+            - Path=/api/parkings/**
+        - id: entry-service
+          uri: lb://entry-service
+          predicates:
+            - Path=/api/entries/**
+        - id: report-service
+          uri: lb://report-service
+          predicates:
+            - Path=/api/reports/**
+        - id: notification-service-docs
+          uri: lb://notification-service
+          predicates:
+            - Path=/api/notifications/**,/notification-service/**,/notification-service/v3/api-docs/**,/notification-service/swagger-ui/**
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://eureka:eureka-secret@localhost:8761/eureka/
+  instance:
+    prefer-ip-address: true
+
+jwt:
+  secret: ${JWT_SECRET:xwz_jwt_super_secret_key_must_be_at_least_256_bits_long_for_hs256}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+logging:
+  level:
+    com.amnii.parking: DEBUG

@@ -8,20 +8,10 @@ spring:
     gateway:
       discovery:
         locator:
-          enabled: false
-      globalcors:
-        cors-configurations:
-          '[/**]':
-            allowed-origin-patterns: "*"
-            allowed-methods:
-              - GET
-              - POST
-              - PUT
-              - PATCH
-              - DELETE
-              - OPTIONS
-            allowed-headers: "*"
-            exposed-headers: "*"
+          enabled: true
+          lower-case-service-id: true
+      default-filters:
+        - name: AuthenticationFilter
       routes:
         - id: auth-service
           uri: lb://auth-service
@@ -39,10 +29,13 @@ spring:
           uri: lb://report-service
           predicates:
             - Path=/api/reports/**
-        - id: notification-service-docs
+        - id: notification-service
           uri: lb://notification-service
           predicates:
-            - Path=/api/notifications/**,/notification-service/**,/notification-service/v3/api-docs/**,/notification-service/swagger-ui/**
+            - Path=/api/notifications/**
+
+jwt:
+  secret: ${JWT_SECRET:xwz_jwt_super_secret_key_must_be_at_least_256_bits_long_for_hs256}
 
 eureka:
   client:
@@ -51,15 +44,7 @@ eureka:
   instance:
     prefer-ip-address: true
 
-jwt:
-  secret: ${JWT_SECRET:xwz_jwt_super_secret_key_must_be_at_least_256_bits_long_for_hs256}
-
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info
-
 logging:
   level:
+    org.springframework.cloud.gateway: DEBUG
     com.amnii.parking: DEBUG
